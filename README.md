@@ -11,19 +11,21 @@ Defense mechanisms such as AppArmor and SELinux are out of scope for this projec
 
 Target for the final solution is kernel version >=4.0.
 However, to demonstrate the basics first, we start off with older kernel versions and see how they've evolved.
-Version 2.4 and 2.6 are described pretty well in the literature mentioned below.
+Versions 2.4 and 2.6 are described pretty well in the literature mentioned below.
 They lack security features present in newer versions which makes our demonstations much easier.
 
-If you're not sure what a rootkit is, go check Wikipedia.
+For the people who are not sure what a rootkit is, [Wikipedia (link)](https://en.wikipedia.org/wiki/Rootkit) provides a good introduction.
 
 
 ## literature
 
 Interesting papers:
+
  - A. Baliga, V. Ganapathy and L. Iftode. "Detecting Kernel-Level Rootkits Using Data Structure Invariants." IEEE Transactions on Dependable and Secure Computing 8.5 (2011): 670-84. doi: [10.1109/TDSC.2010.38.](https://doi.org/10.1109/TDSC.2010.38)
  - Teh Jia Yew, Khairulmizam Samsudin, Nur Izura Udzir, and Shaiful Jahari Hashim. "Rootkit Guard (RG) - An Architecture for Rootkit Resistant File-system Implementation Based on TPM." Pertanika Journal of Science & Technology 21.2 (2013): 507-20. [Web.](https://myjurnal.mohe.gov.my/filebank/published_article/28630/18.pdf)
 
 Books:
+
  - "Linux Kernel Internals" by: M. Beck, H. Böhme, M. Dziadzka, U. Kunitz, R. Magnus, D. Verworner
  - "Understanding the Linux Kernel" by: Daniel P. Bovet, Marco Cesati
  - "Linux Device Drivers" by: Jonathan Corbet, Alessandro Rubini, Greg Kroah-Hartman
@@ -32,12 +34,15 @@ And too many internet resources to list them all.
 Official kernel documentation included.
 
 Another repository explaining kernel hacking (and rootkits):
+
  - [https://github.com/xcellerator/linux\_kernel\_hacking](https://github.com/xcellerator/linux_kernel_hacking)
 
 Another anti-rootkit project:
+
  - [https://github.com/nbulischeck/tyton](https://github.com/nbulischeck/tyton)
 
 Other online resources:
+
  - [kernel source code browser](https://elixir.bootlin.com/linux/latest/source)
  - [lectures and labs on the Linux kernel](https://linux-kernel-labs.github.io/refs/heads/master/index.html)
  - [The Linux Kernel documentation](https://www.kernel.org/doc/html/latest/)

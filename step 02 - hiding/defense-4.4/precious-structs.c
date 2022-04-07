@@ -1,6 +1,7 @@
+#include <linux/crc32.h>
 #include <linux/init.h>
-#include <linux/module.h>
 #include <linux/kallsyms.h>
+#include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/rbtree_latch.h>
 #include <linux/syscalls.h>
@@ -40,6 +41,8 @@ static void __attribute__((optimize (0))) overwrite_byte(unsigned char *addr, un
 
 // == SCANNNING ==
 
+#define _CRC_SEED 0xDEADC0DE
+
 #define SCAN_MODE_FIX	((scan_results.mode & 1) > 0)
 
 static struct Results {
@@ -49,7 +52,7 @@ static struct Results {
 } scan_results;
 
 static struct Target {
-	unsigned long addr, size;
+	unsigned long addr, size, checksum;
 	unsigned char *copy;
 	struct Target *next;
 } *scan_targets;
@@ -72,7 +75,7 @@ void scan_targets_add(unsigned long addr)
 	new_target = (struct Target *) vmalloc(sizeof(struct Target));
 	new_mem = (unsigned char *) vmalloc(size);
 	if (!new_target || !new_mem) {
-		printk("ark: couldn't allocate memory for target - %lu\n", addr);
+		printk("ark: couldn't allocate memory for target - n %s a %lx s %lu\n", namebuf, addr, size);
 		return;
 	}
 	memcpy(new_mem, (const void *) addr, size);
@@ -80,6 +83,7 @@ void scan_targets_add(unsigned long addr)
 	*new_target = (struct Target) {
 		.addr = addr,
 		.size = size,
+		.checksum = crc32(_CRC_SEED, new_mem, size),
 		.copy = new_mem,
 		.next = NULL,
 	};
@@ -138,13 +142,31 @@ int scan_targets_check(void)
 	unsigned char *b, c;
 
 	scan_results.overwrites = 0;
-	printk("ark: scan targets check started\n");
 	for (t = scan_targets; t != NULL; t = t->next) {
-		//printk("ark: scanning target - t %lu s %lu\n", t->addr, t->size);
+		overwritten = 0;
 
 		(*_kallsyms_lookup)(t->addr, &size, &offset, &modname, namebuf);
 
-		overwritten = 0;
+		if (t->checksum != crc32(_CRC_SEED, t->copy, t->size)) {
+			printk("ark: checksum mismatch, function copy overwritten - n %s a %lx\n", namebuf, t->addr);
+			overwritten = 1;
+
+			if (t->checksum == crc32(_CRC_SEED, (unsigned char const *) t->addr, t->size)) {
+				printk("ark: checksum matches real memory, only our copy has been corrupted\n");
+				if (SCAN_MODE_FIX && size == t->size) {
+					printk("ark: updating our copy - n %s a %lx s %lu\n", namebuf, t->addr, t->size);
+					memcpy(t->copy, (const void *) t->addr, size);
+				}
+			}
+
+			// what if the checksum has been overwritten?
+			// it won't match the real memory and it won't match our copy
+			// however the copy might still match the real memory
+			// should we update our checksum?
+
+			continue;
+		}
+
 		for (i = 0; i < t->size && i < size-offset; i++) {
 			b = (unsigned char *) t->addr + i;
 			c = t->copy[i];
@@ -154,18 +176,17 @@ int scan_targets_check(void)
 				overwritten = 1;
 
 			if (SCAN_MODE_FIX) {
-				printk("ark: found a mismatch, function overwritten - %lu, "
-					"attempting to fix - got %02x want %02x\n", t->addr, *b, c);
+				printk("ark: found a mismatch, function overwritten - n %s a %lx, "
+					"attempting to fix - got %02x want %02x\n", namebuf, t->addr, *b, c);
 				overwrite_byte(b, c);
 			} else {
 				// do not fix, report only once
-				printk("ark: found a mismatch, function overwritten - %lu\n", t->addr);
+				printk("ark: found a mismatch, function overwritten - n %s a %lx\n", namebuf, t->addr);
 				break;
 			}
 		}
 		scan_results.overwrites += overwritten;
 	}
-	printk("ark: scan targets check finished\n");
 
 	return scan_results.overwrites;
 }
@@ -189,7 +210,7 @@ int scan_mod_tree_node(struct rb_node *n)
 			if (kallsyms->symtab[i].st_shndx == SHN_UNDEF)
 				continue;
 
-			printk("ark: hidden module symbols - m %s s %s a %llu\n", m->name,
+			printk("ark: hidden module symbols - m %s n %s a %llx\n", m->name,
 				kallsyms->strtab + kallsyms->symtab[i].st_name, kallsyms->symtab[i].st_value);
 		}
 
@@ -202,11 +223,12 @@ int scan_mod_tree_node(struct rb_node *n)
 
 int scan_update(void)
 {
-	char buf[255]; // BUG: this size is chosen arbitrarily
-	int i;
+	char symbolbuf[KSYM_SYMBOL_LEN];
 
 	struct rb_node *node_current;
 	struct rb_root *node_root;
+
+	int i;
 
 	if (scan_results.finished < scan_results.started)
 		return -1;
@@ -215,47 +237,48 @@ int scan_update(void)
 	scan_results.mismatches = 0;
 
 	// check #1 (write protection): cr0 WP bit
-	if((read_cr0() & 0x00010000) == 0) {
+	if ((read_cr0() & 0x00010000) == 0) {
 		printk("ark: write protection was disabled, something fishy might be going on\n");
 		write_cr0(read_cr0() | 0x00010000);
 	}
 
 	// check #2 (symbol table): sys_call_table entries
-	printk("ark: scan sys_call_table check started\n");
+	printk("ark: scan sys_call_table check\n");
 	for (i = 0; i < SYSCALL_LIMIT; i++) {
 		if (_sys_call_table_copy[i] != _sys_call_table[i]) {
 			scan_results.mismatches++;
 			printk("ark: found a mismatch on syscall %d\n", i);
-			sprint_symbol(buf, _sys_call_table[i]); // BUG: this may cause a buffer overflow
-			printk("ark: offender - %s\n", buf);
+			sprint_symbol(symbolbuf, _sys_call_table[i]);
+			printk("ark: offender - %s\n", symbolbuf);
 			if (SCAN_MODE_FIX) {
 				printk("ark: attempted to fix syscall %d\n", i);
 				restore_syscall(i);
 			}
 		}
 	}
-	printk("ark: scan sys_call_table check finished\n");
 
 	// check #3 (patching): function and struct integrity
+	printk("ark: scan targets check\n");
+	// mismatches for this scan type are counted separately as "overwrites"
 	scan_targets_check();
 
 	// check #4 (modules): traverse mod_tree to find hidden modules
 	if (_mod_tree) {
-		printk("ark: scan mod_tree check started\n");
+		printk("ark: scan mod_tree check\n");
 		node_root = _mod_tree->root.tree;
 		node_current = rb_first_postorder(node_root);
 		while (node_current != NULL) {
 			scan_results.mismatches += scan_mod_tree_node(node_current);
 			node_current = rb_next_postorder(node_current);
 		}
-		printk("ark: scan mod_tree check finished\n");
 	}
 
 	scan_results.finished = scan_results.started + 1;
+	printk("ark: scan finished\n");
 	return scan_results.mismatches;
 }
 
-void scan_init(void)
+int scan_init(void)
 {
 	int i;
 
@@ -282,6 +305,7 @@ void scan_init(void)
 	targets_apply(scan_targets_add_symbol);
 
 	scan_results.finished = 1;
+	return 0;
 }
 
 
@@ -306,10 +330,12 @@ ssize_t proc_read(struct file *f, char __user *out, size_t count, loff_t *off)
 
 	if (*off > 0)
 		return 0;
+
 	if (count > size)
 		count = size;
 
-	copy_to_user(out, buf, count); // BUG: check the return value
+	if (copy_to_user(out, buf, count))
+		return -EFAULT;
 
 	*off = count;
 	return count;
@@ -320,7 +346,9 @@ ssize_t proc_write(struct file *f, const char __user *in, size_t count, loff_t *
 	char buf[1];
 
 	if (count > 0) {
-		copy_from_user(buf, in, 1); // BUG: check the return value
+		if (copy_from_user(buf, in, 1))
+			return -EFAULT;
+
 		switch (buf[0]) {
 		case '1':	// FIX
 		case '0':	// none
@@ -345,12 +373,15 @@ struct file_operations proc_fops = {
 
 static int _mod_init(void)
 {
-	scan_init();
+	int err;
+
+	if ((err = scan_init()))
+		return err;
 
 	// proc init
 	proc_entry = proc_create("ark", 0666, NULL, &proc_fops);
 	if (proc_entry == NULL)
-		return -1;
+		return -EROFS;
 
 	printk("Anti-rootkit registered.\n");
 

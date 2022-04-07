@@ -59,7 +59,7 @@ In `defense-4.4` module we register a few symbols for procfs and a few for ext4 
 There are more struct types for managing different operations.
 We may stumble upon `seq_operations` in network code.
 Suterusu hooks a few functions related to entries under `/proc/net` to hide itself.
-Normally they would be accessed similarly to file operations, through reference to the associated `seq_operations` struct field.
+Normally they would be accessed similarly to file operations, through reference to the associated struct field.
 
 These functions have been listed as scan targets in the defense module.
 Again, as a scan target we want to list both the struct instance and the actual function implementation too.

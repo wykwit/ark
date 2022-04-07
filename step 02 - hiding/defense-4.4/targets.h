@@ -3,6 +3,25 @@
 
 char *target_generic[] = {
 	"idt_table",
+
+	"generic_file_llseek",
+	"generic_file_read_iter",
+
+	"do_execve",
+	"do_execveat",
+	"open_exec",
+
+	"compat_filldir",
+	"compat_fillonedir",
+	"filldir",
+	"filldir64",
+	"fillonedir",
+	"iterate_dir",
+
+	"vfs_read",
+	"vfs_write",
+	"vfs_iter_read",
+	"vfs_iter_write",
 };
 
 char *target_proc[] = {
@@ -14,7 +33,6 @@ char *target_proc[] = {
 
 	"proc_link_inode_operations",
 
-	"proc_root",
 	"proc_root_inode_operations",	
 	"proc_root_operations",
 
@@ -108,7 +126,9 @@ char *target_net_func[] = {
 };
 
 #define _TARGET_CALLBACK(x) \
-	for (i = 0; i < (sizeof(x)/sizeof(x[0])); i++) (*callback)(x[i]); r += i;
+	for (i = 0; i < (sizeof(x)/sizeof(x[0])); i++) \
+		(*callback)(x[i]); \
+	r += i;
 
 int targets_apply(void (*callback)(char *))
 {

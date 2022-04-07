@@ -11,7 +11,7 @@ Each system call has proper handler function assigned in kernel's symbol table o
 The very basic way to hook a function is simply to get the original system call handler's address from that table and then replace it with your own.
 
 We could easily do that on kernel version 2.4. The example is given in `attack-2.4` directory.
-[This stackoverflow question](https://stackoverflow.com/questions/70053823/syscallsys-getuid-returns-different-result-from-getuid) gives some context on why we overwrite two syscalls (getuid and getuid32) in that module.
+[This stackoverflow question (link)](https://stackoverflow.com/questions/70053823/syscallsys-getuid-returns-different-result-from-getuid) gives some context on why we overwrite two syscalls (getuid and getuid32) in that module.
 
 Starting from version 2.6 the symbol table is not exported for use by kernel modules anymore and therefore it is a little bit harder to find it and modify the entries.
 

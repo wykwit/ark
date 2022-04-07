@@ -22,9 +22,6 @@ int scan_update(void)
 	scan_results.started = scan_results.finished + 1;
 	scan_results.mismatches = 0;
 
-	if (scan_results.fix > 0)
-		scan_results.fix = 0;
-
 	int i;
 	for (i = 0; i < SYSCALL_LIMIT; i++) {
 		if (sys_call_table_copy[i] != sys_call_table[i]) {
@@ -33,7 +30,6 @@ int scan_update(void)
 			if (scan_results.fix < 0) continue;
 			printk("ARK attempted to fix syscall %d\n", i);
 			sys_call_table[i] = sys_call_table_copy[i];
-			scan_results.fix++;
 		}
 	}
 
@@ -65,7 +61,7 @@ static int write_proc_ark(struct file *file, const char *buffer, unsigned long c
 	if (count > 0) {
 		switch (buffer[0]) {
 		case '1':
-			scan_results.fix = 0;
+			scan_results.fix = 1;
 			break;
 		case '0':
 			scan_results.fix = -1;
